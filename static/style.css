@@ -1,8 +1,17 @@
 body {
   font-family: "Open Sans", sans-serif;
   font-optical-sizing: auto;
-  font-weight: <weight>;
   font-style: normal;
   font-variation-settings:
-    "wdth" 100;
+  width = 100;
+}
+
+h1 {
+    color: #58327c;
+}
+
+button {
+    padding: auto;
+    font-size: 16px;
+    cursor: pointer;
 }
