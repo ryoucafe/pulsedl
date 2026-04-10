@@ -2,21 +2,47 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PulseDL</title>
     <link rel="stylesheet" href="../static/style.css">
 </head>
 <body>
     <h1>PulseDL</h1>
-    <p>This is a test page </p>
+    <p>Electron + yt-dlp desktop downloader</p>
 
     <button onclick="test()">Call JS file</button>
     <p id="result"></p>
 
-    <button id="callPython">Call the Python API</button>
-    <p id="pythonResult"></p>
+    <button id="callBackend">Call Electron backend</button><br><br>
+    
+    <input type="text" id="urlInput" placeholder="Enter URL to download (YouTube, etc.)"><br><br>
 
-    <input type="text" id="userUrl" placeholder="Enter URL to download">
-    <button id="downloadButton">Download</button>
+    <label for="formatSelect">Format:</label>
+    <select id="formatSelect">
+        <option value="best">Best</option>
+        <option value="mp4">MP4</option>
+        <option value="mp3">MP3</option>
+        <option value="flac">FLAC</option>
+    </select><br><br>
+
+    <label for="qualitySelect">Quality:</label>
+    <select id="qualitySelect"></select><br><br>
+
+    <label for="filenameTemplateInput">Filename template:</label>
+    <input type="text" id="filenameTemplateInput" value="%(title)s.%(ext)s"><br><br>
+
+    <label for="outputDirInput">Output folder:</label>
+    <input type="text" id="outputDirInput" placeholder="Default: system Downloads folder">
+    <button id="browseFolderButton">Browse</button><br><br>
+
+    <button id="downloadButton">Download</button><br><br>
+    <div id="progressBox">
+        <div>Progress: <span id="progressPercent">0%</span></div>
+        <div>Speed: <span id="progressSpeed">-</span></div>
+        <div>ETA: <span id="progressEta">-</span></div>
+    </div><br>
+    <p id="backendResult"></p>
     
     <script src="../static/script.js"></script>
+</body>
 </html>

@@ -1,0 +1,16 @@
+{
+  "name": "pulsedl",
+  "version": "0.1.0",
+  "description": "Electron frontend for yt-dlp",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && electron .",
+    "dev": "npm run start"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "electron": "^41.2.0",
+    "typescript": "^5.8.3"
+  }
+}
