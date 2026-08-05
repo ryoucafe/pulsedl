@@ -26,6 +26,8 @@ const audioQualities = [
     { value: "128K", label: "128 kbps" }
 ];
 
+const flacQualities = [{ value: "best", label: "FLAC"}]
+
 let completionResetTimer = null;
 
 function setText(id, value) {
@@ -95,13 +97,14 @@ function showView(viewId) {
 function populateQualityOptions(format) {
     const qualitySelect = document.getElementById("qualitySelect");
     qualitySelect.innerHTML = "";
-
-    const options = format === "mp3" || format === "flac" ? audioQualities : videoQualities;
-    for (const item of options) {
-        const option = document.createElement("option");
-        option.value = item.value;
-        option.textContent = item.label;
-        qualitySelect.appendChild(option);
+    if (format !== "flac" || format !== "best") {
+      const options = format === "mp3" ? audioQualities : videoQualities;
+      for (const item of options) {
+          const option = document.createElement("option");
+          option.value = item.value;
+          option.textContent = item.label;
+          qualitySelect.appendChild(option);
+      }
     }
 }
 
