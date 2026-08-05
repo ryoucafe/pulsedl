@@ -37,6 +37,7 @@ const buildYtDlpArgs = (request: DownloadRequest): string[] => {
   const args: string[] = ["--newline"];
   const outputTemplate = sanitizeFilenameTemplate(request.filenameTemplate);
   args.push("-o", outputTemplate);
+  args.push("--embed-metadata","--embed-thumbnail");
 
   if (request.format === "mp3") {
     args.push("-x", "--audio-format", "mp3");
@@ -53,12 +54,16 @@ const buildYtDlpArgs = (request: DownloadRequest): string[] => {
     }
   } else if (request.format === "flac") {
     args.push("-x", "--audio-format", "flac");
-    const audioQuality = (request.quality ?? "").trim();
+    const audioQuality = (request.quality ?? "0").trim();
+
     if (audioQuality) {
       args.push("--audio-quality", audioQuality);
     }
-  } 
+  }
 
+  if (request.format !== "mp4") {
+    args.push("--parse-metadata", 'uploader:%(artist)s', "--parse-metadata", 'playlist_index:%(track_number)s');
+  }
   args.push(request.url.trim());
   return args;
 };
