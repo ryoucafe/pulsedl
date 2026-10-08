@@ -190,6 +190,14 @@ h3 {
     color: var(--muted);
 }
 
+.panel-header p.is-error {
+    color: var(--danger);
+}
+
+.panel-header p.is-success {
+    color: var(--accent);
+}
+
 .url-row,
 .browse-row,
 .settings-grid,

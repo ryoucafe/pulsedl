@@ -26,7 +26,16 @@ const audioQualities = [
     { value: "128K", label: "128 kbps" }
 ];
 
-const flacQualities = [{ value: "best", label: "FLAC"}]
+const flacQualities = [{ value: "0", label: "Lossless" }];
+
+const bestQualities = [{ value: "best", label: "Best available" }];
+
+const qualitiesByFormat = {
+    best: bestQualities,
+    mp4: videoQualities,
+    mp3: audioQualities,
+    flac: flacQualities
+};
 
 let completionResetTimer = null;
 
@@ -44,7 +53,7 @@ function setProgress(progress) {
     setText("progressPercent", percent);
     setText("progressSpeed", progress.speed || "-");
     setText("progressEta", progress.eta || "-");
-    setText("progressStage", progress.stage ? formatStage(progress.stage) : "Idle");
+    setText("progressStage", progress.stage ? formatStage(progress.stage, progress.item) : "Idle");
 
     const progressFill = document.getElementById("progressFill");
     if (progressFill) {
@@ -52,7 +61,7 @@ function setProgress(progress) {
     }
 }
 
-function formatStage(stage) {
+function formatStage(stage, item) {
     const stageLabels = {
         starting: "Starting",
         downloading: "Downloading",
@@ -60,13 +69,16 @@ function formatStage(stage) {
         done: "Done",
         error: "Error"
     };
-    return stageLabels[stage] || "Idle";
+    const label = stageLabels[stage] || "Idle";
+    return item ? `${label} (${item})` : label;
 }
 
 function setStatus(message, type) {
     const resultElement = document.getElementById("backendResult");
     if (resultElement) {
         resultElement.textContent = message;
+        resultElement.classList.toggle("is-error", type === "error");
+        resultElement.classList.toggle("is-success", type === "success");
     }
 }
 
@@ -97,28 +109,24 @@ function showView(viewId) {
 function populateQualityOptions(format) {
     const qualitySelect = document.getElementById("qualitySelect");
     qualitySelect.innerHTML = "";
-    if (format !== "flac" || format !== "best") {
-      const options = format === "mp3" ? audioQualities : videoQualities;
-      for (const item of options) {
-          const option = document.createElement("option");
-          option.value = item.value;
-          option.textContent = item.label;
-          qualitySelect.appendChild(option);
-      }
+    const options = qualitiesByFormat[format] || bestQualities;
+    for (const item of options) {
+        const option = document.createElement("option");
+        option.value = item.value;
+        option.textContent = item.label;
+        qualitySelect.appendChild(option);
     }
+    qualitySelect.disabled = options.length <= 1;
 }
 
 function createRequestId() {
     return `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function test() {
-    setText("result", "Message from JS file!");
-}
-
 const formatSelect = document.getElementById("formatSelect");
 const qualitySelect = document.getElementById("qualitySelect");
 const outputDirInput = document.getElementById("outputDirInput");
+const filenameTemplateInput = document.getElementById("filenameTemplateInput");
 const browseFolderButton = document.getElementById("browseFolderButton");
 const downloadButton = document.getElementById("downloadButton");
 
@@ -128,26 +136,35 @@ setProgress({ percent: 0 });
 if (!window.pulseDlApi) {
     setStatus("Start the app with Electron to enable downloads.", "error");
 } else {
-    setStatus("Ready for a new download.", "success");
+    setStatus("Ready for a new download.");
     loadSavedSettings();
 }
 
 async function loadSavedSettings() {
     try {
         const settings = await getApi().getSettings();
-        if (settings && typeof settings.outputDir === "string" && !outputDirInput.value) {
+        if (!settings) {
+            return;
+        }
+        if (typeof settings.outputDir === "string" && !outputDirInput.value) {
             outputDirInput.value = settings.outputDir;
+        }
+        if (typeof settings.filenameTemplate === "string" && settings.filenameTemplate) {
+            filenameTemplateInput.value = settings.filenameTemplate;
         }
     } catch (error) {
         console.error("Failed to load settings:", error);
     }
 }
 
-async function saveOutputDir() {
+async function saveSettings() {
     try {
-        await getApi().saveSettings({ outputDir: outputDirInput.value.trim() });
+        await getApi().saveSettings({
+            outputDir: outputDirInput.value.trim(),
+            filenameTemplate: filenameTemplateInput.value.trim()
+        });
     } catch (error) {
-        console.error("Failed to save output folder:", error);
+        console.error("Failed to save settings:", error);
     }
 }
 
@@ -166,7 +183,7 @@ browseFolderButton.addEventListener("click", async function() {
         const selected = await getApi().chooseOutputDir();
         if (selected) {
             outputDirInput.value = selected;
-            await saveOutputDir();
+            await saveSettings();
         }
     } catch (error) {
         setStatus(`Folder error: ${getErrorMessage(error)}`, "error");
@@ -174,23 +191,13 @@ browseFolderButton.addEventListener("click", async function() {
     }
 });
 
-outputDirInput.addEventListener("change", saveOutputDir);
-
-document.getElementById("callBackend").addEventListener("click", async function() {
-    try {
-        const data = await getApi().ping();
-        setStatus(`Backend: ${data.message}`, "success");
-    } catch (error) {
-        setStatus(`Error: ${getErrorMessage(error)}`, "error");
-        console.error(error);
-    }
-});
+outputDirInput.addEventListener("change", saveSettings);
+filenameTemplateInput.addEventListener("change", saveSettings);
 
 downloadButton.addEventListener("click", async function() {
     let unsubscribe = null;
     try {
         const urlInput = document.getElementById("urlInput");
-        const filenameTemplateInput = document.getElementById("filenameTemplateInput");
         const userUrl = urlInput.value.trim();
         const requestId = createRequestId();
 
@@ -219,7 +226,7 @@ downloadButton.addEventListener("click", async function() {
             } else if (progress.stage === "done") {
                 setProgress({ percent: 100, speed: "-", eta: "-", stage: "done" });
             } else if (progress.stage === "processing" || progress.stage === "starting") {
-                setText("progressStage", formatStage(progress.stage));
+                setText("progressStage", formatStage(progress.stage, progress.item));
             } else if (progress.stage === "error") {
                 setProgress({ percent: 0, speed: "-", eta: "-", stage: "error" });
             }

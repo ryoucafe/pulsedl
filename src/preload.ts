@@ -9,7 +9,7 @@ type ApiResponse = {
 type DownloadRequest = {
   requestId: string;
   url: string;
-  format: "best" | "mp4" | "mp3";
+  format: "best" | "mp4" | "mp3" | "flac";
   quality?: string;
   outputDir?: string;
   filenameTemplate?: string;
@@ -21,15 +21,16 @@ type DownloadProgress = {
   speed?: string;
   eta?: string;
   stage: "starting" | "downloading" | "processing" | "done" | "error";
+  item?: string;
   raw?: string;
 };
 
 type AppSettings = {
   outputDir?: string;
+  filenameTemplate?: string;
 };
 
 contextBridge.exposeInMainWorld("pulseDlApi", {
-  ping: (): Promise<ApiResponse> => ipcRenderer.invoke("ping"),
   chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke("choose-output-dir"),
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("get-settings"),
   saveSettings: (settings: AppSettings): Promise<AppSettings> => ipcRenderer.invoke("save-settings", settings),
