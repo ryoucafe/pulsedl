@@ -1,6 +1,6 @@
 {
   "name": "pulsedl",
-  "version": "0.3",
+  "version": "0.3.0",
   "description": "Electron frontend for yt-dlp",
   "main": "dist/main.js",
   "scripts": {
