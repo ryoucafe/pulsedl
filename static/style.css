@@ -358,6 +358,14 @@ select:focus {
     background: #11161a;
 }
 
+.deps-details {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.deps-details dd {
+    overflow-wrap: anywhere;
+}
+
 dt {
     margin-bottom: 2px;
     color: var(--muted);

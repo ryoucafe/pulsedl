@@ -30,7 +30,41 @@ type AppSettings = {
   filenameTemplate?: string;
 };
 
+type DependencyInfo = {
+  name: "yt-dlp" | "ffmpeg";
+  installed: boolean;
+  source: "app" | "system" | null;
+  version?: string;
+};
+
+type DependencyResult = {
+  dependencies: DependencyInfo[];
+  errors: string[];
+};
+
+type DependencyProgress = {
+  name: "yt-dlp" | "ffmpeg";
+  stage: "downloading" | "extracting" | "updating" | "done" | "error";
+  percent?: number;
+  speed?: string;
+  eta?: string;
+  message?: string;
+};
+
 contextBridge.exposeInMainWorld("pulseDlApi", {
+  readClipboard: (): Promise<string> => ipcRenderer.invoke("read-clipboard"),
+  getDependencyStatus: (): Promise<DependencyInfo[]> => ipcRenderer.invoke("deps-status"),
+  prepareDependencies: (): Promise<DependencyResult> => ipcRenderer.invoke("deps-startup"),
+  updateDependencies: (): Promise<DependencyResult> => ipcRenderer.invoke("deps-update"),
+  onDependencyProgress: (callback: (progress: DependencyProgress) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: DependencyProgress) => {
+      callback(payload);
+    };
+    ipcRenderer.on("deps-progress", listener);
+    return () => {
+      ipcRenderer.removeListener("deps-progress", listener);
+    };
+  },
   chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke("choose-output-dir"),
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("get-settings"),
   saveSettings: (settings: AppSettings): Promise<AppSettings> => ipcRenderer.invoke("save-settings", settings),

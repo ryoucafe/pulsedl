@@ -1,7 +1,19 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  DependencyInfo,
+  DependencyProgress,
+  getBinDir,
+  getDependencyStatus,
+  hasManagedFfmpeg,
+  installMissingDependencies,
+  isDependencyBusy,
+  resolveCommand,
+  updateAllDependencies,
+  updateYtDlpOnly
+} from "./deps";
 
 type DownloadFormat = "best" | "mp4" | "mp3" | "flac";
 
@@ -33,7 +45,17 @@ type DownloadProgress = {
 type AppSettings = {
   outputDir?: string;
   filenameTemplate?: string;
+  lastYtDlpUpdateCheck?: number;
 };
+
+type DependencyResult = {
+  dependencies: DependencyInfo[];
+  errors: string[];
+};
+
+const YT_DLP_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+let activeDownloads = 0;
 
 const getSettingsPath = (): string => path.join(app.getPath("userData"), "settings.json");
 
@@ -87,6 +109,10 @@ const buildYtDlpArgs = (request: DownloadRequest): string[] => {
   } else if (request.format === "flac") {
     // FLAC is lossless; 0 = best quality.
     args.push("-x", "--audio-format", "flac", "--audio-quality", "0");
+  }
+
+  if (hasManagedFfmpeg()) {
+    args.push("--ffmpeg-location", getBinDir());
   }
 
   if (request.format === "mp3" || request.format === "flac") {
@@ -224,10 +250,60 @@ app.whenReady().then(() => {
     return merged;
   });
 
+  ipcMain.handle("read-clipboard", async (): Promise<string> => {
+    return clipboard.readText();
+  });
+
+  ipcMain.handle("deps-status", async (): Promise<DependencyInfo[]> => {
+    return getDependencyStatus();
+  });
+
+  // First launch installs anything missing; after that yt-dlp is refreshed at most once a day.
+  ipcMain.handle("deps-startup", async (event): Promise<DependencyResult> => {
+    const onProgress = (progress: DependencyProgress) => event.sender.send("deps-progress", progress);
+    try {
+      const errors = await installMissingDependencies(onProgress);
+
+      const settings = loadSettings();
+      const lastCheck = settings.lastYtDlpUpdateCheck ?? 0;
+      if (errors.length === 0 && Date.now() - lastCheck > YT_DLP_UPDATE_INTERVAL_MS) {
+        errors.push(...(await updateYtDlpOnly(onProgress)));
+        if (errors.length === 0) {
+          saveSettings({ ...loadSettings(), lastYtDlpUpdateCheck: Date.now() });
+        }
+      }
+      return { dependencies: await getDependencyStatus(), errors };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { dependencies: await getDependencyStatus(), errors: [message] };
+    }
+  });
+
+  ipcMain.handle("deps-update", async (event): Promise<DependencyResult> => {
+    if (activeDownloads > 0) {
+      return { dependencies: await getDependencyStatus(), errors: ["Wait for the current download to finish before updating."] };
+    }
+    const onProgress = (progress: DependencyProgress) => event.sender.send("deps-progress", progress);
+    try {
+      const errors = await updateAllDependencies(onProgress);
+      if (errors.length === 0) {
+        saveSettings({ ...loadSettings(), lastYtDlpUpdateCheck: Date.now() });
+      }
+      return { dependencies: await getDependencyStatus(), errors };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { dependencies: await getDependencyStatus(), errors: [message] };
+    }
+  });
+
   ipcMain.handle("download", async (event, request: DownloadRequest): Promise<DownloadResult> => {
     const trimmed = typeof request.url === "string" ? request.url.trim() : "";
     if (!trimmed) {
       return { requestId: request.requestId, status: "error", message: "URL is required." };
+    }
+
+    if (isDependencyBusy()) {
+      return { requestId: request.requestId, status: "error", message: "yt-dlp and ffmpeg are being updated. Try again in a moment." };
     }
 
     const outputDir = (request.outputDir ?? "").trim() || app.getPath("downloads");
@@ -239,14 +315,25 @@ app.whenReady().then(() => {
       };
     }
 
-    return new Promise<DownloadResult>((resolve) => {
+    activeDownloads += 1;
+    return new Promise<DownloadResult>((settle) => {
+      let settled = false;
+      const resolve = (result: DownloadResult): void => {
+        if (!settled) {
+          settled = true;
+          activeDownloads -= 1;
+          settle(result);
+        }
+      };
+
       const args = buildYtDlpArgs(request);
 
       emitProgress(event, { requestId: request.requestId, stage: "starting", raw: "Starting yt-dlp..." });
 
-      const child = spawn("yt-dlp", args, {
+      const child = spawn(resolveCommand("yt-dlp"), args, {
         cwd: outputDir,
-        shell: false
+        shell: false,
+        windowsHide: true
       });
 
       let lastStdoutLine = "";
@@ -294,7 +381,7 @@ app.whenReady().then(() => {
           const result: DownloadResult = {
             requestId: request.requestId,
             status: "error",
-            message: "yt-dlp was not found in PATH. Install yt-dlp and restart the app."
+            message: "yt-dlp is not installed. Open Settings and click Update dependencies."
           };
           emitProgress(event, { requestId: request.requestId, stage: "error", raw: result.message });
           resolve(result);

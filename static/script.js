@@ -66,6 +66,8 @@ function formatStage(stage, item) {
         starting: "Starting",
         downloading: "Downloading",
         processing: "Processing",
+        extracting: "Extracting",
+        updating: "Updating",
         done: "Done",
         error: "Error"
     };
@@ -129,6 +131,12 @@ const outputDirInput = document.getElementById("outputDirInput");
 const filenameTemplateInput = document.getElementById("filenameTemplateInput");
 const browseFolderButton = document.getElementById("browseFolderButton");
 const downloadButton = document.getElementById("downloadButton");
+const pasteDownloadButton = document.getElementById("pasteDownloadButton");
+const urlInput = document.getElementById("urlInput");
+const updateDepsButton = document.getElementById("updateDepsButton");
+
+let isDownloading = false;
+let dependenciesBusy = false;
 
 populateQualityOptions(formatSelect.value);
 setProgress({ percent: 0 });
@@ -138,7 +146,114 @@ if (!window.pulseDlApi) {
 } else {
     setStatus("Ready for a new download.");
     loadSavedSettings();
+    getApi().onDependencyProgress(handleDependencyProgress);
+    prepareDependencies();
 }
+
+function updateButtons() {
+    downloadButton.disabled = isDownloading || dependenciesBusy;
+    pasteDownloadButton.disabled = isDownloading || dependenciesBusy;
+    updateDepsButton.disabled = isDownloading || dependenciesBusy;
+}
+
+function describeDependency(info) {
+    if (!info || !info.installed) {
+        return "Not installed";
+    }
+    const source = info.source === "app" ? "built-in" : "system";
+    return `${info.version} (${source})`;
+}
+
+function renderDependencies(dependencies) {
+    const byName = {};
+    for (const info of dependencies || []) {
+        byName[info.name] = info;
+    }
+    setText("ytDlpVersion", describeDependency(byName["yt-dlp"]));
+    setText("ffmpegVersion", describeDependency(byName.ffmpeg));
+}
+
+function setDepsStatus(message, type) {
+    const element = document.getElementById("depsStatus");
+    if (element) {
+        element.textContent = message;
+        element.classList.toggle("is-error", type === "error");
+        element.classList.toggle("is-success", type === "success");
+    }
+}
+
+function handleDependencyProgress(progress) {
+    let message;
+    if (progress.stage === "downloading") {
+        const percent = typeof progress.percent === "number" ? ` ${progress.percent.toFixed(0)}%` : "";
+        message = `Downloading ${progress.name}...${percent}`;
+    } else if (progress.stage === "extracting") {
+        message = `Extracting ${progress.name}...`;
+    } else if (progress.stage === "updating") {
+        message = progress.message || `Updating ${progress.name}...`;
+    } else if (progress.stage === "done") {
+        message = progress.message || `${progress.name} is ready.`;
+    } else {
+        message = `${progress.name}: ${progress.message || "failed"}`;
+    }
+
+    const type = progress.stage === "error" ? "error" : undefined;
+    setDepsStatus(message, type);
+    setStatus(message, type);
+
+    setProgress({
+        percent: progress.stage === "done" ? 100 : progress.percent,
+        speed: progress.stage === "downloading" ? progress.speed : "-",
+        eta: progress.stage === "downloading" ? progress.eta : "-",
+        stage: progress.stage,
+        item: progress.name
+    });
+}
+
+async function runDependencyTask(task, successMessage) {
+    dependenciesBusy = true;
+    updateButtons();
+    try {
+        const result = await task();
+        renderDependencies(result.dependencies);
+        const ytDlp = result.dependencies.find(function(info) { return info.name === "yt-dlp"; });
+
+        if (result.errors.length > 0) {
+            const message = `Dependency problem: ${result.errors.join(" | ")}`;
+            setDepsStatus(message, "error");
+            if (ytDlp && ytDlp.installed) {
+                // A fallback copy still works, so downloads can go ahead.
+                setStatus("Ready for a new download.");
+                setProgress({ percent: 0 });
+            } else {
+                setStatus(message, "error");
+            }
+        } else {
+            setDepsStatus(successMessage, "success");
+            setStatus("Ready for a new download.");
+            // Leave a finished bar visible briefly, then return to idle.
+            scheduleCompletionReset();
+        }
+    } catch (error) {
+        const message = `Dependency error: ${getErrorMessage(error)}`;
+        setDepsStatus(message, "error");
+        setStatus(message, "error");
+        console.error("Dependency task failed:", error);
+    } finally {
+        dependenciesBusy = false;
+        updateButtons();
+    }
+}
+
+function prepareDependencies() {
+    setDepsStatus("Checking yt-dlp and ffmpeg...");
+    return runDependencyTask(function() { return getApi().prepareDependencies(); }, "yt-dlp and ffmpeg are ready.");
+}
+
+updateDepsButton.addEventListener("click", function() {
+    setDepsStatus("Updating yt-dlp and ffmpeg...");
+    runDependencyTask(function() { return getApi().updateDependencies(); }, "yt-dlp and ffmpeg are up to date.");
+});
 
 async function loadSavedSettings() {
     try {
@@ -194,10 +309,37 @@ browseFolderButton.addEventListener("click", async function() {
 outputDirInput.addEventListener("change", saveSettings);
 filenameTemplateInput.addEventListener("change", saveSettings);
 
-downloadButton.addEventListener("click", async function() {
+downloadButton.addEventListener("click", startDownload);
+
+urlInput.addEventListener("keydown", function(event) {
+    if (event.key === "Enter" && !downloadButton.disabled) {
+        event.preventDefault();
+        startDownload();
+    }
+});
+
+pasteDownloadButton.addEventListener("click", async function() {
+    try {
+        const text = (await getApi().readClipboard()).trim();
+        if (!/^https?:\/\/\S+$/i.test(text)) {
+            setStatus("The clipboard does not contain a link.", "error");
+            return;
+        }
+        urlInput.value = text;
+        await startDownload();
+    } catch (error) {
+        setStatus(`Clipboard error: ${getErrorMessage(error)}`, "error");
+        console.error("Failed to read clipboard:", error);
+    }
+});
+
+async function startDownload() {
+    if (isDownloading || dependenciesBusy) {
+        return;
+    }
+
     let unsubscribe = null;
     try {
-        const urlInput = document.getElementById("urlInput");
         const userUrl = urlInput.value.trim();
         const requestId = createRequestId();
 
@@ -214,7 +356,8 @@ downloadButton.addEventListener("click", async function() {
 
         setProgress({ percent: 0, stage: "starting" });
         setStatus("Download in progress...");
-        downloadButton.disabled = true;
+        isDownloading = true;
+        updateButtons();
 
         unsubscribe = getApi().onDownloadProgress(function(progress) {
             if (progress.requestId !== requestId) {
@@ -254,6 +397,7 @@ downloadButton.addEventListener("click", async function() {
         if (unsubscribe) {
             unsubscribe();
         }
-        downloadButton.disabled = false;
+        isDownloading = false;
+        updateButtons();
     }
-});
+}
