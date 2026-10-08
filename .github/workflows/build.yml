@@ -32,7 +32,7 @@ jobs:
             artifact: pulsedl-linux
           - name: macOS
             os: macos-26
-            args: --mac --x64
+            args: --mac --universal
             artifact: pulsedl-macos
 
     steps:
@@ -89,4 +89,5 @@ jobs:
           name: PulseDL ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
           files: release-assets/*
           draft: false
-          prerelease: false
+          # Only version tags become the "Latest" release; branch builds are marked prerelease.
+          prerelease: ${{ github.ref_type != 'tag' }}

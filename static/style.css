@@ -190,6 +190,14 @@ h3 {
     color: var(--muted);
 }
 
+.panel-header p.is-error {
+    color: var(--danger);
+}
+
+.panel-header p.is-success {
+    color: var(--accent);
+}
+
 .url-row,
 .browse-row,
 .settings-grid,
@@ -348,6 +356,14 @@ select:focus {
     min-width: 0;
     padding: 10px 12px;
     background: #11161a;
+}
+
+.deps-details {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.deps-details dd {
+    overflow-wrap: anywhere;
 }
 
 dt {

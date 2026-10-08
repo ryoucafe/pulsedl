@@ -37,13 +37,6 @@
                 >
                     <header class="view-header">
                         <h2 id="downloadTitle">Download</h2>
-                        <button
-                            class="ghost-button"
-                            id="callBackend"
-                            type="button"
-                        >
-                            Check backend
-                        </button>
                     </header>
 
                     <div class="panel command-panel">
@@ -78,6 +71,14 @@
                                     autocomplete="off"
                                 />
                             </label>
+                            <button
+                                class="secondary-button"
+                                id="pasteDownloadButton"
+                                type="button"
+                                title="Paste a URL from the clipboard and start downloading"
+                            >
+                                Paste &amp; download
+                            </button>
                             <button
                                 class="primary-button"
                                 id="downloadButton"
@@ -174,6 +175,32 @@
                                     </button>
                                 </div>
                             </div>
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header">
+                                <div>
+                                    <h3>Dependencies</h3>
+                                    <p id="depsStatus">Checking...</p>
+                                </div>
+                                <button
+                                    class="secondary-button"
+                                    id="updateDepsButton"
+                                    type="button"
+                                >
+                                    Update dependencies
+                                </button>
+                            </div>
+                            <dl class="status-details deps-details">
+                                <div>
+                                    <dt>yt-dlp</dt>
+                                    <dd id="ytDlpVersion">-</dd>
+                                </div>
+                                <div>
+                                    <dt>ffmpeg</dt>
+                                    <dd id="ffmpegVersion">-</dd>
+                                </div>
+                            </dl>
                         </div>
                     </div>
                 </section>
