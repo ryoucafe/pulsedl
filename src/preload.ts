@@ -24,9 +24,15 @@ type DownloadProgress = {
   raw?: string;
 };
 
+type AppSettings = {
+  outputDir?: string;
+};
+
 contextBridge.exposeInMainWorld("pulseDlApi", {
   ping: (): Promise<ApiResponse> => ipcRenderer.invoke("ping"),
   chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke("choose-output-dir"),
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke("get-settings"),
+  saveSettings: (settings: AppSettings): Promise<AppSettings> => ipcRenderer.invoke("save-settings", settings),
   download: (request: DownloadRequest): Promise<ApiResponse> => ipcRenderer.invoke("download", request),
   onDownloadProgress: (callback: (progress: DownloadProgress) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: DownloadProgress) => {

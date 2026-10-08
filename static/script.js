@@ -129,6 +129,26 @@ if (!window.pulseDlApi) {
     setStatus("Start the app with Electron to enable downloads.", "error");
 } else {
     setStatus("Ready for a new download.", "success");
+    loadSavedSettings();
+}
+
+async function loadSavedSettings() {
+    try {
+        const settings = await getApi().getSettings();
+        if (settings && typeof settings.outputDir === "string" && !outputDirInput.value) {
+            outputDirInput.value = settings.outputDir;
+        }
+    } catch (error) {
+        console.error("Failed to load settings:", error);
+    }
+}
+
+async function saveOutputDir() {
+    try {
+        await getApi().saveSettings({ outputDir: outputDirInput.value.trim() });
+    } catch (error) {
+        console.error("Failed to save output folder:", error);
+    }
 }
 
 document.querySelectorAll("[data-view-target]").forEach(function(button) {
@@ -146,12 +166,15 @@ browseFolderButton.addEventListener("click", async function() {
         const selected = await getApi().chooseOutputDir();
         if (selected) {
             outputDirInput.value = selected;
+            await saveOutputDir();
         }
     } catch (error) {
         setStatus(`Folder error: ${getErrorMessage(error)}`, "error");
         console.error("Failed to choose folder:", error);
     }
 });
+
+outputDirInput.addEventListener("change", saveOutputDir);
 
 document.getElementById("callBackend").addEventListener("click", async function() {
     try {

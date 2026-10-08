@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 type DownloadFormat = "best" | "mp4" | "mp3" | "flac";
@@ -28,7 +29,28 @@ type DownloadProgress = {
   raw?: string;
 };
 
-const sanitizeFilenameTemplate = (template: string | undefined): string => {
+type AppSettings = {
+  outputDir?: string;
+};
+
+const getSettingsPath = (): string => path.join(app.getPath("userData"), "settings.json");
+
+const loadSettings = (): AppSettings => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(getSettingsPath(), "utf-8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveSettings = (settings: AppSettings): void => {
+  const settingsPath = getSettingsPath();
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+};
+
+const sanitizeFilenameTemplate =(template: string | undefined): string => {
   const trimmed = (template ?? "").trim();
   return trimmed || "%(title)s.%(ext)s";
 };
@@ -113,6 +135,19 @@ app.whenReady().then(() => {
       return null;
     }
     return result.filePaths[0];
+  });
+
+  ipcMain.handle("get-settings", async (): Promise<AppSettings> => {
+    return loadSettings();
+  });
+
+  ipcMain.handle("save-settings", async (_event, partial: AppSettings): Promise<AppSettings> => {
+    const merged: AppSettings = { ...loadSettings() };
+    if (typeof partial?.outputDir === "string") {
+      merged.outputDir = partial.outputDir.trim();
+    }
+    saveSettings(merged);
+    return merged;
   });
 
   ipcMain.handle("ping", async () => {
